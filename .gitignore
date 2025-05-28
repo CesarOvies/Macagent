@@ -1,2 +1,33 @@
-obj/
+# Build output
 bin/
+obj/
+
+# macOS system files
+.DS_Store
+._*
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.userosscache
+
+# VS Code
+.vscode/
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Logs and temp files
+*.log
+*.cache
+*.pid
+*.seed
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
