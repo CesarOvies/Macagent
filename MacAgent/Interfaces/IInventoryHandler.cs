@@ -1,4 +1,4 @@
-namespace Mac.Interfaces;
+namespace MacAgent.Interfaces;
 
 public interface IInventarioHandler
 {
