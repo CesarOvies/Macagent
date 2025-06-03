@@ -1,7 +1,9 @@
 ﻿using MacAgent.Handlers;
+#if !DEBUG
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+#endif
 
 namespace MacAgent;
 
@@ -11,7 +13,7 @@ public class Program
     {
         try
         {
-#if !DEBUG
+#if DEBUG
             await new ComputerInventoryHandler().Executa();
 #else
             IHostBuilder builder = Host.CreateDefaultBuilder()
