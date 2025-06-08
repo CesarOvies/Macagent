@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MacAgent.Components;
 using MacAgent.Interfaces;
 using MacAgent.Services;
 
@@ -11,54 +12,11 @@ public class ComputerInventoryHandler : IInventarioHandler
 
     public Task Executa()
     {
-        Computer computer = GetComputerInfos();
-        string computer_serialized = JsonSerializer.Serialize(computer, new JsonSerializerOptions { WriteIndented = true });
+        ComputerSystem computer_system = HardwareInfo.GetComputer();
+        string computer_serialized = JsonSerializer.Serialize(computer_system, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText($"{DirectoryReferences.UserProfile}/computer.json", computer_serialized);
 
         return Task.CompletedTask;
-    }
-
-    private Computer GetComputerInfos()
-    {
-        string computer_name = GetComputerName();
-        string factory = "Apple";
-        string sub_type = GetComputerSubType();
-
-        return new Computer()
-        {
-            Name = computer_name,
-            Factory = factory,
-            SubType = sub_type
-        };
-    }
-
-    private static string GetComputerName()
-    {
-        string info = ProcessAppService.ReadProcessOut("/usr/sbin/scutil", "--get ComputerName");
-
-        return info;
-    }
-
-    private static string GetComputerSubType()
-    {
-        string infos = ProcessAppService.ReadProcessOut("/usr/sbin/system_profiler", "SPHardwareDataType");
-        Match match_info = Regex.Match(infos, @"Model Name: (.+)");
-
-        if (match_info.Success == false)
-        {
-            return string.Empty;
-        }
-
-        string sub_type = match_info.Groups[1].Value.Trim();
-
-        if (sub_type.Contains("MacBook", StringComparison.OrdinalIgnoreCase))
-            return "Laptop";
-        else if (sub_type.Contains("iMac", StringComparison.OrdinalIgnoreCase) ||
-                 sub_type.Contains("Mac mini", StringComparison.OrdinalIgnoreCase) ||
-                 sub_type.Contains("Mac Pro", StringComparison.OrdinalIgnoreCase))
-            return "Desktop";
-        else
-            return "Other (Apple Device)";
     }
 
     public class Computer
