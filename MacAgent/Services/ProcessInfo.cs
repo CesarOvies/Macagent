@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace MacAgent.Services;
 
-public class ProcessAppService
+public class ProcessInfo
 {
     public static string ReadProcessOut(string cmd, string args)
     {
