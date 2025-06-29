@@ -97,32 +97,32 @@ public class HardwareInfo
                     if (uint.TryParse(processOutput, out uint frequency))
                         cpu.CurrentClockSpeed = frequency / 1_000_000;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.l1icachesize");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l1icachesize");
 
                     if (uint.TryParse(processOutput, out uint L1InstructionCacheSize))
                         cpu.L1InstructionCacheSize = L1InstructionCacheSize;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.l1dcachesize");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l1dcachesize");
 
                     if (uint.TryParse(processOutput, out uint L1DataCacheSize))
                         cpu.L1DataCacheSize = L1DataCacheSize;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.l2cachesize");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l2cachesize");
 
                     if (uint.TryParse(processOutput, out uint L2CacheSize))
                         cpu.L2CacheSize = L2CacheSize;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.l3cachesize");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l3cachesize");
 
                     if (uint.TryParse(processOutput, out uint L3CacheSize))
                         cpu.L3CacheSize = L3CacheSize;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.physicalcpu");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.physicalcpu");
 
                     if (uint.TryParse(processOutput, out uint numberOfCores))
                         cpu.NumberOfCores = numberOfCores;
 
-                    processOutput = ProcessInfo.ReadProcessOutput("sysctl", $"-n hw.{perflevel}.logicalcpu");
+                    processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.logicalcpu");
 
                     if (uint.TryParse(processOutput, out uint numberOfLogicalProcessors))
                         cpu.NumberOfLogicalProcessors = numberOfLogicalProcessors;
@@ -134,47 +134,47 @@ public class HardwareInfo
             {
                 CPU cpu = new CPU();
 
-                processOutput = ReadProcessOutput("sysctl", "-n machdep.cpu.brand_string");
+                processOutput = ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
 
                 // Intel CPUs include the clock speed as part of the name
                 cpu.Name = processOutput.Split('@')[0].Trim();
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.cpufrequency_max");
+                processOutput = ReadProcessOut("sysctl", "-n hw.cpufrequency_max");
 
                 if (uint.TryParse(processOutput, out uint maxFrequency))
                     cpu.MaxClockSpeed = maxFrequency / 1_000_000;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.cpufrequency");
+                processOutput = ReadProcessOut("sysctl", "-n hw.cpufrequency");
 
                 if (uint.TryParse(processOutput, out uint frequency))
                     cpu.CurrentClockSpeed = frequency / 1_000_000;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.l1icachesize");
+                processOutput = ReadProcessOut("sysctl", "-n hw.l1icachesize");
 
                 if (uint.TryParse(processOutput, out uint L1InstructionCacheSize))
                     cpu.L1InstructionCacheSize = L1InstructionCacheSize;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.l1dcachesize");
+                processOutput = ReadProcessOut("sysctl", "-n hw.l1dcachesize");
 
                 if (uint.TryParse(processOutput, out uint L1DataCacheSize))
                     cpu.L1DataCacheSize = L1DataCacheSize;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.l2cachesize");
+                processOutput = ReadProcessOut("sysctl", "-n hw.l2cachesize");
 
                 if (uint.TryParse(processOutput, out uint L2CacheSize))
                     cpu.L2CacheSize = L2CacheSize;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.l3cachesize");
+                processOutput = ReadProcessOut("sysctl", "-n hw.l3cachesize");
 
                 if (uint.TryParse(processOutput, out uint L3CacheSize))
                     cpu.L3CacheSize = L3CacheSize;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.physicalcpu");
+                processOutput = ReadProcessOut("sysctl", "-n hw.physicalcpu");
 
                 if (uint.TryParse(processOutput, out uint numberOfCores))
                     cpu.NumberOfCores = numberOfCores;
 
-                processOutput = ReadProcessOutput("sysctl", "-n hw.logicalcpu");
+                processOutput = ReadProcessOut("sysctl", "-n hw.logicalcpu");
 
                 if (uint.TryParse(processOutput, out uint numberOfLogicalProcessors))
                     cpu.NumberOfLogicalProcessors = numberOfLogicalProcessors;

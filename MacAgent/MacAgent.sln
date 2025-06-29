@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MacAgent", "MacAgent.csproj", "{3EC2BF82-2A4D-7057-EAFA-1AA0569E3FB9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3EC2BF82-2A4D-7057-EAFA-1AA0569E3FB9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3EC2BF82-2A4D-7057-EAFA-1AA0569E3FB9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3EC2BF82-2A4D-7057-EAFA-1AA0569E3FB9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3EC2BF82-2A4D-7057-EAFA-1AA0569E3FB9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {67C968A7-A59C-476A-A995-291A32624134}
+	EndGlobalSection
+EndGlobal
