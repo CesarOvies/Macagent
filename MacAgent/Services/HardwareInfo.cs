@@ -68,35 +68,35 @@ public class HardwareInfo
 
     public List<CPU> GetCpuInfo()
     {
-        string brandString = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
-        string cpuName = brandString.Split('@')[0].Trim();
-        string nperfLevelsOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.nperflevels");
-        uint.TryParse(nperfLevelsOutput, out uint nperfLevels);
-        List<CPU> cpuList = new List<CPU>();
+        string brand_string = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
+        string cpu_name = brand_string.Split('@')[0].Trim();
+        string nperf_levels = ProcessInfo.ReadProcessOut("sysctl", "-n hw.nperflevels");
+        uint.TryParse(nperf_levels, out uint nperf_levels_out);
+        List<CPU> cpu_list = new List<CPU>();
 
-        if (nperfLevels > 1)
+        if (nperf_levels_out > 1)
         {
-            for (int i = 0; i < nperfLevels; i++)
+            for (int i = 0; i < nperf_levels_out; i++)
             {
                 CPU cpu = new CPU
                 {
-                    Name = cpuName,
+                    Name = cpu_name,
                     Caption = i.ToString(),
                     Description = $"perflevel{i}"
                 };
 
                 PopulateCpuDetails(cpu, $"hw.perflevel{i}.");
-                cpuList.Add(cpu);
+                cpu_list.Add(cpu);
             }
         }
         else
         {
-            CPU cpu = new CPU { Name = cpuName };
+            CPU cpu = new CPU { Name = cpu_name };
             PopulateCpuDetails(cpu, "hw.");
-            cpuList.Add(cpu);
+            cpu_list.Add(cpu);
         }
 
-        return cpuList;
+        return cpu_list;
     }
 
     /// <param name="cpu">O objeto CPU a ser preenchido.</param>
