@@ -282,4 +282,66 @@ public class HardwareInfo
 
         return memory_list;
     }
+
+    private List<Components.Monitor> GetMonitor()
+    {
+        string process_out = ProcessInfo.ReadProcessOut("system_profiler", "SPDisplaysDataType");
+        string[] device_blocks = Regex.Split(process_out, @"(?=^\s{4}[^\s].*:\s*$)", RegexOptions.Multiline);
+        List<Components.Monitor> monitor_list = new List<Components.Monitor>();
+
+        foreach (string block in device_blocks)
+        {
+            if (!block.Contains("Display Type:"))
+            {
+                continue;
+            }
+
+            Components.Monitor monitor = new Components.Monitor();
+            string[] lines = block.Trim().Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            string? name_line = lines.FirstOrDefault();
+            if (name_line != null)
+            {
+                monitor.Name = name_line.Trim().TrimEnd(':');
+                monitor.Caption = monitor.Name;
+                monitor.Description = monitor.Name;
+                monitor.UserFriendlyName = monitor.Name;
+            }
+
+            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
+        {
+            { "Display Type:", value => monitor.MonitorType = value },
+            { "Online:", value => monitor.Active = value.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) },
+            { "Display Serial Number:", value => monitor.SerialNumberID = value },
+            { "Resolution:", value =>
+                {
+                    string resolution_part = value.Split(' ')[0];
+                    string[] dimensions = resolution_part.Split('x');
+
+                    if (dimensions.Length == 2 &&
+                        uint.TryParse(dimensions[0].Trim(), out uint width) &&
+                        uint.TryParse(dimensions[1].Trim(), out uint height))
+                    {
+                        monitor.Resolution = new ScreenResolution(width, height);
+                    }
+                }
+            }
+        };
+
+            foreach (string line in lines.Skip(1))
+            {
+                string trimmedLine = line.Trim();
+                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmedLine.StartsWith(p.Key));
+
+                if (mapping.Key != null)
+                {
+                    string value = trimmedLine.Substring(mapping.Key.Length).Trim();
+                    mapping.Value(value);
+                }
+            }
+            monitor_list.Add(monitor);
+        }
+
+        return monitor_list;
+    }
 }
