@@ -66,7 +66,7 @@ public class HardwareInfo
             return "Other (Apple Device)";
     }
 
-    public List<CPU> GetCpuInfo()
+    public static List<CPU> GetCpu()
     {
         string brand_string = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
         string cpu_name = brand_string.Split('@')[0].Trim();
