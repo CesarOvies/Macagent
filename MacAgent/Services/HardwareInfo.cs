@@ -188,37 +188,21 @@ public class HardwareInfo
 
     public static List<Battery> GetBattery()
     {
-        List<Battery> battery_list = new List<Battery>();
         Battery battery = new Battery();
-
         string processOutput = ProcessInfo.ReadProcessOut("pmset", "-g batt");
 
-        Regex estimatedChargeRemainingRegex = new Regex("(\\d+)%");
-        Match match = estimatedChargeRemainingRegex.Match(processOutput);
-
-        if (match.Success && match.Groups.Count > 1)
+        Match chargeMatch = Regex.Match(processOutput, @"(\d+)%");
+        if (chargeMatch.Success && ushort.TryParse(chargeMatch.Groups[1].Value, out ushort estimatedChargeRemaining))
         {
-            if (ushort.TryParse(match.Groups[1].Value, out ushort estimatedChargeRemaining))
-            {
-                battery.EstimatedChargeRemaining = estimatedChargeRemaining;
-            }
+            battery.EstimatedChargeRemaining = estimatedChargeRemaining;
         }
 
-        Regex estimatedRunTimeRegex = new Regex("(\\d+:\\d+)");
-        match = estimatedRunTimeRegex.Match(processOutput);
-
-        if (match.Success && match.Groups.Count > 1)
+        Match timeMatch = Regex.Match(processOutput, @"(\d+):(\d+)(?=\s)");
+        if (timeMatch.Success && uint.TryParse(timeMatch.Groups[1].Value, out uint hours) && uint.TryParse(timeMatch.Groups[2].Value, out uint minutes))
         {
-            string[] estimatedRunTime = match.Groups[1].Value.Split(':');
-
-            if (estimatedRunTime.Length == 2 && uint.TryParse(estimatedRunTime[0], out uint hours) && uint.TryParse(estimatedRunTime[1], out uint minutes))
-            {
-                battery.EstimatedRunTime = hours * 60 + minutes;
-            }
+            battery.EstimatedRunTime = (hours * 60) + minutes;
         }
 
-        battery_list.Add(battery);
-
-        return battery_list;
+        return new List<Battery> { battery };
     }
 }
