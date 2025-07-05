@@ -4,13 +4,13 @@ using MacAgent.Services;
 
 namespace MacAgent.Handlers;
 
-public class ComputerInventoryHandler : IInventarioHandler
+public class CpuInventoryHandler : IInventarioHandler
 {
-    public string Nome => "Computer";
+    public string Nome => "Cpu";
 
     public Task Executa()
     {
-        ComputerSystem computer_system = HardwareInfo.GetComputer();
+        List<CPU> Cpu_info = HardwareInfo.GetCpu();
 
         return Task.CompletedTask;
     }

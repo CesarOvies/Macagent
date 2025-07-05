@@ -4,13 +4,13 @@ using MacAgent.Services;
 
 namespace MacAgent.Handlers;
 
-public class ComputerInventoryHandler : IInventarioHandler
+public class BatteryInventoryHandler : IInventarioHandler
 {
-    public string Nome => "Computer";
+    public string Nome => "Battery";
 
     public Task Executa()
     {
-        ComputerSystem computer_system = HardwareInfo.GetComputer();
+        List<Battery> battery_info = HardwareInfo.GetBattery();
 
         return Task.CompletedTask;
     }

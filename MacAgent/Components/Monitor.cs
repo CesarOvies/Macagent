@@ -17,9 +17,7 @@ public class Monitor
 
     public string Name { get; set; } = string.Empty;
 
-    public UInt32 PixelsPerXLogicalInch { get; set; }
-
-    public UInt32 PixelsPerYLogicalInch { get; set; }
+    public ScreenResolution Resolution { get; set; }
 
     public bool Active { get; set; }
 
@@ -34,4 +32,18 @@ public class Monitor
     public UInt16 WeekOfManufacture { get; set; }
 
     public UInt16 YearOfManufacture { get; set; }
+}
+
+public struct ScreenResolution
+{
+    public uint Width { get; }
+    public uint Height { get; }
+
+    public ScreenResolution(uint width, uint height)
+    {
+        Width = width;
+        Height = height;
+    }
+
+    public override readonly string ToString() => $"{Width}x{Height}";
 }

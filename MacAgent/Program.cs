@@ -15,6 +15,7 @@ public class Program
         {
 #if DEBUG
             await new ComputerInventoryHandler().Executa();
+            await new CpuInventoryHandler().Executa();
 #else
             IHostBuilder builder = Host.CreateDefaultBuilder()
                 .ConfigureServices(services =>
