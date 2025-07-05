@@ -38,6 +38,4 @@ public class CPU
     public Boolean VirtualizationFirmwareEnabled { get; set; }
 
     public UInt64 PercentProcessorTime { get; set; }
-
-    public List<CpuCore> CpuCoreList { get; set; } = new List<CpuCore>();
 }
