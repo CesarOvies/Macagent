@@ -101,7 +101,7 @@ public class HardwareInfo
 
     /// <param name="cpu">O objeto CPU a ser preenchido.</param>
     /// <param name="key_prefix">O prefixo a ser usado para as chaves sysctl ("hw." ou "hw.perflevelX.").</param>
-    private void PopulateCpuDetails(CPU cpu, string key_prefix)
+    private static void PopulateCpuDetails(CPU cpu, string key_prefix)
     {
         uint GetSysctlUint(string key)
         {
