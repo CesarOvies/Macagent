@@ -139,4 +139,72 @@ public class HardwareInfo
 
         return new List<Battery> { battery };
     }
+
+    public static List<Drive> GetDrive()
+    {
+        string process_out = ProcessInfo.ReadProcessOut("lshw", "-class disk");
+        string[] device_blocks = process_out.Split(new[] { "*-" }, StringSplitOptions.RemoveEmptyEntries);
+        List<Drive> drives = new List<Drive>();
+
+        foreach (string block in device_blocks)
+        {
+            if (!block.Trim().StartsWith("disk") && !block.Trim().StartsWith("cdrom"))
+            {
+                continue; // Ignora blocos irrelevantes (como o cabeçalho inicial)
+            }
+
+            Drive drive = new Drive();
+            string[] lines = block.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Um dicionário para mapear a chave da linha à ação de atribuição na propriedade do objeto.
+            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
+        {
+            { "description:", value => drive.Description = value },
+            { "product:",     value => drive.Model = drive.Caption = value },
+            { "vendor:",      value => drive.Manufacturer = value },
+            { "logical name:",value => drive.Name = value },
+            { "version:",     value => drive.FirmwareRevision = value },
+            { "serial:",      value => drive.SerialNumber = value },
+            { "size:",        value => drive.Size = ExtractSizeInBytes(value) }
+        };
+
+            foreach (string line in lines)
+            {
+                string trimmed_line = line.Trim();
+                // Encontra a chave que a linha começa e executa a ação correspondente.
+                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmed_line.StartsWith(p.Key));
+                if (mapping.Key != null)
+                {
+                    // Remove a chave e obtém apenas o valor para passar para a Action.
+                    string value = trimmed_line[mapping.Key.Length..].Trim();
+                    mapping.Value(value);
+                }
+            }
+            drives.Add(drive);
+        }
+
+        return drives;
+    }
+
+    private static ulong ExtractSizeInBytes(string input)
+    {
+        Match match = Regex.Match(input, @"(\d+)\s*([KMGT]B)", RegexOptions.IgnoreCase);
+
+        if (!match.Success || !ulong.TryParse(match.Groups[1].Value, out ulong size))
+        {
+            return 0;
+        }
+
+        Dictionary<string, ulong> multipliers = new Dictionary<string, ulong>
+    {
+        { "KB", 1024UL },
+        { "MB", 1024UL * 1024 },
+        { "GB", 1024UL * 1024 * 1024 },
+        { "TB", 1024UL * 1024 * 1024 * 1024 }
+    };
+
+        string unit = match.Groups[2].Value.ToUpper();
+
+        return multipliers.TryGetValue(unit, out ulong multiplier) ? size * multiplier : size;
+    }
 }
