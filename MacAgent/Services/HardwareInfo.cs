@@ -169,10 +169,10 @@ public class HardwareInfo
 
             foreach (string line in lines)
             {
-                string trimmed_line = line.Trim();               
+                string trimmed_line = line.Trim();
                 KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmed_line.StartsWith(p.Key));
                 if (mapping.Key != null)
-                {                   
+                {
                     string value = trimmed_line[mapping.Key.Length..].Trim();
                     mapping.Value(value);
                 }
@@ -203,5 +203,25 @@ public class HardwareInfo
         string unit = match.Groups[2].Value.ToUpper();
 
         return multipliers.TryGetValue(unit, out ulong multiplier) ? size * multiplier : size;
+    }
+
+    private static List<Keyboard> GetKeyboard()
+    {
+        string read_process_out = ProcessInfo.ReadProcessOut("cat", "/proc/bus/input/devices");
+        string[] input_lines = read_process_out.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        Regex regex = new Regex("N: Name=\"([^\"]+)\"", RegexOptions.Compiled);
+
+        return input_lines
+        .Where(line => line.Contains("keyboard", StringComparison.OrdinalIgnoreCase) && line.Trim().StartsWith("N: Name="))
+        .Select(line => regex.Match(line))
+        .Where(match => match.Success)
+        .Select(match => match.Groups[1].Value)
+        .Select(name => new Keyboard
+         {
+                Caption = name,
+                Description = name,
+                Name = name
+         })
+        .ToList();
     }
 }
