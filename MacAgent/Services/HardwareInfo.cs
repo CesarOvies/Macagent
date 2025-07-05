@@ -217,11 +217,69 @@ public class HardwareInfo
         .Where(match => match.Success)
         .Select(match => match.Groups[1].Value)
         .Select(name => new Keyboard
-         {
-                Caption = name,
-                Description = name,
-                Name = name
-         })
+        {
+            Caption = name,
+            Description = name,
+            Name = name
+        })
         .ToList();
+    }
+
+    private static List<Memory> GetMemory()
+    {
+        string process_out = ProcessInfo.ReadProcessOut("system_profiler", "SPMemoryDataType");
+        string[] memory_blocks = Regex.Split(process_out, @"(?=Bank\s\d+/)", RegexOptions.Multiline);
+        List<Memory> memory_list = new List<Memory>();
+
+        foreach (string block in memory_blocks)
+        {
+            string trimmed_block = block.Trim();
+
+            if (!trimmed_block.StartsWith("Bank"))
+            {
+                continue;
+            }
+
+            Memory memory = new Memory();
+            string[] lines = trimmed_block.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
+        {
+            { "Size:", value => memory.Capacity = ExtractSizeInBytes(value) },
+            { "Type:", value =>
+                {
+                    if (Enum.TryParse(value, out FormFactor tempFormFactor))
+                    {
+                        memory.FormFactor = tempFormFactor;
+                    }
+                }
+            },
+            { "Speed:", value =>
+                {
+                    if (uint.TryParse(value.Split(' ')[0], out uint temp_speed))
+                    {
+                        memory.Speed = temp_speed;
+                    }
+                }
+            },
+            { "Manufacturer:",  value => memory.Manufacturer = value },
+            { "Part Number:",   value => memory.PartNumber = value },
+            { "Serial Number:", value => memory.SerialNumber = value }
+        };
+
+            foreach (string line in lines)
+            {
+                string trimmed_line = line.Trim();
+                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmed_line.StartsWith(p.Key));
+
+                if (mapping.Key != null)
+                {
+                    string value = trimmed_line.Substring(mapping.Key.Length).Trim();
+                    mapping.Value(value);
+                }
+            }
+            memory_list.Add(memory);
+        }
+
+        return memory_list;
     }
 }
