@@ -66,124 +66,58 @@ public class HardwareInfo
             return "Other (Apple Device)";
     }
 
-    public static List<CPU> GetCpu()
+    public List<CPU> GetCpuInfo()
     {
+        string brandString = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
+        string cpuName = brandString.Split('@')[0].Trim();
+        string nperfLevelsOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.nperflevels");
+        uint.TryParse(nperfLevelsOutput, out uint nperfLevels);
         List<CPU> cpuList = new List<CPU>();
 
-        string processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.nperflevels");
-
-        if (uint.TryParse(processOutput, out uint levels) && levels > 1)
+        if (nperfLevels > 1)
         {
-            for (int i = 0; i < levels; i++)
+            for (int i = 0; i < nperfLevels; i++)
             {
-                string perflevel = "perflevel" + i;
+                CPU cpu = new CPU
+                {
+                    Name = cpuName,
+                    Caption = i.ToString(),
+                    Description = $"perflevel{i}"
+                };
 
-                CPU cpu = new CPU();
-
-                cpu.Caption = i.ToString();
-                cpu.Description = perflevel;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
-
-                // Intel CPUs include the clock speed as part of the name
-                cpu.Name = processOutput.Split('@')[0].Trim();
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.cpufrequency_max");
-
-                if (uint.TryParse(processOutput, out uint maxFrequency))
-                    cpu.MaxClockSpeed = maxFrequency / 1_000_000;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.cpufrequency");
-
-                if (uint.TryParse(processOutput, out uint frequency))
-                    cpu.CurrentClockSpeed = frequency / 1_000_000;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l1icachesize");
-
-                if (uint.TryParse(processOutput, out uint L1InstructionCacheSize))
-                    cpu.L1InstructionCacheSize = L1InstructionCacheSize;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l1dcachesize");
-
-                if (uint.TryParse(processOutput, out uint L1DataCacheSize))
-                    cpu.L1DataCacheSize = L1DataCacheSize;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l2cachesize");
-
-                if (uint.TryParse(processOutput, out uint L2CacheSize))
-                    cpu.L2CacheSize = L2CacheSize;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.l3cachesize");
-
-                if (uint.TryParse(processOutput, out uint L3CacheSize))
-                    cpu.L3CacheSize = L3CacheSize;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.physicalcpu");
-
-                if (uint.TryParse(processOutput, out uint numberOfCores))
-                    cpu.NumberOfCores = numberOfCores;
-
-                processOutput = ProcessInfo.ReadProcessOut("sysctl", $"-n hw.{perflevel}.logicalcpu");
-
-                if (uint.TryParse(processOutput, out uint numberOfLogicalProcessors))
-                    cpu.NumberOfLogicalProcessors = numberOfLogicalProcessors;
-
+                PopulateCpuDetails(cpu, $"hw.perflevel{i}.");
                 cpuList.Add(cpu);
             }
         }
         else
         {
-            CPU cpu = new CPU();
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n machdep.cpu.brand_string");
-
-            // Intel CPUs include the clock speed as part of the name
-            cpu.Name = processOutput.Split('@')[0].Trim();
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.cpufrequency_max");
-
-            if (uint.TryParse(processOutput, out uint maxFrequency))
-                cpu.MaxClockSpeed = maxFrequency / 1_000_000;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.cpufrequency");
-
-            if (uint.TryParse(processOutput, out uint frequency))
-                cpu.CurrentClockSpeed = frequency / 1_000_000;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.l1icachesize");
-
-            if (uint.TryParse(processOutput, out uint L1InstructionCacheSize))
-                cpu.L1InstructionCacheSize = L1InstructionCacheSize;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.l1dcachesize");
-
-            if (uint.TryParse(processOutput, out uint L1DataCacheSize))
-                cpu.L1DataCacheSize = L1DataCacheSize;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.l2cachesize");
-
-            if (uint.TryParse(processOutput, out uint L2CacheSize))
-                cpu.L2CacheSize = L2CacheSize;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.l3cachesize");
-
-            if (uint.TryParse(processOutput, out uint L3CacheSize))
-                cpu.L3CacheSize = L3CacheSize;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.physicalcpu");
-
-            if (uint.TryParse(processOutput, out uint numberOfCores))
-                cpu.NumberOfCores = numberOfCores;
-
-            processOutput = ProcessInfo.ReadProcessOut("sysctl", "-n hw.logicalcpu");
-
-            if (uint.TryParse(processOutput, out uint numberOfLogicalProcessors))
-                cpu.NumberOfLogicalProcessors = numberOfLogicalProcessors;
-
+            CPU cpu = new CPU { Name = cpuName };
+            PopulateCpuDetails(cpu, "hw.");
             cpuList.Add(cpu);
         }
 
         return cpuList;
+    }
+
+    /// <param name="cpu">O objeto CPU a ser preenchido.</param>
+    /// <param name="key_prefix">O prefixo a ser usado para as chaves sysctl ("hw." ou "hw.perflevelX.").</param>
+    private void PopulateCpuDetails(CPU cpu, string key_prefix)
+    {
+        uint GetSysctlUint(string key)
+        {
+            string output = ProcessInfo.ReadProcessOut("sysctl", $"-n {key}");
+            uint.TryParse(output, out uint value);
+            return value;
+        }
+
+        cpu.MaxClockSpeed = GetSysctlUint("hw.cpufrequency_max") / 1_000_000;
+        cpu.CurrentClockSpeed = GetSysctlUint("hw.cpufrequency") / 1_000_000;
+        cpu.L1InstructionCacheSize = GetSysctlUint($"{key_prefix}l1icachesize");
+        cpu.L1DataCacheSize = GetSysctlUint($"{key_prefix}l1dcachesize");
+        cpu.L2CacheSize = GetSysctlUint($"{key_prefix}l2cachesize");
+        cpu.L3CacheSize = GetSysctlUint($"{key_prefix}l3cachesize");
+        cpu.NumberOfCores = GetSysctlUint($"{key_prefix}physicalcpu");
+        cpu.NumberOfLogicalProcessors = GetSysctlUint($"{key_prefix}logicalcpu");
     }
 
     public static List<Battery> GetBattery()
