@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text.RegularExpressions;
 using MacAgent.Components;
 
@@ -123,18 +124,143 @@ public class HardwareInfo
     public static List<Battery> GetBattery()
     {
         Battery battery = new Battery();
-        string processOutput = ProcessInfo.ReadProcessOut("pmset", "-g batt");
+        string profiler_output = ProcessInfo.ReadProcessOut("system_profiler", "SPPowerDataType");
+        string[] lines = profiler_output.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-        Match chargeMatch = Regex.Match(processOutput, @"(\d+)%");
-        if (chargeMatch.Success && ushort.TryParse(chargeMatch.Groups[1].Value, out ushort estimatedChargeRemaining))
+        Dictionary<string, Action<string>> battery_property_map = new Dictionary<string, Action<string>>
+    {
+        { "Serial Number", value => battery.SerialNumber = value },
+        { "Device Name", value => battery.DeviceName = value },
+        { "Firmware Version", value => battery.FirmwareVersion = value },
+        { "Hardware Revision", value => battery.HardwareRevision = value },
+        { "Fully Charged", value => battery.IsFullyCharged = value.Equals("Yes", StringComparison.OrdinalIgnoreCase) },
+        { "Charging", value => battery.IsCharging = value.Equals("Yes", StringComparison.OrdinalIgnoreCase) },
+        { "State of Charge (%)", value =>
+            {
+                string porcentage = value.Substring(value.IndexOf(':') + 1).Trim();
+
+                if(ushort.TryParse(porcentage, out ushort parse))
+                {
+                    battery.StateOfCharge = parse;
+                }
+            }
+        },
+        { "Cycle Count", value =>
+            {
+                string numeric_part = value.Substring(value.IndexOf(':') + 1).Trim().TrimEnd('%');
+
+                if (uint.TryParse(numeric_part, out uint parse))
+                {
+                    battery.CycleCount = parse;
+                }
+            }
+        },
+        { "Condition", value => battery.Condition = value },
+        { "Maximum Capacity", value =>
+            {
+                string numeric_part = value.Substring(value.IndexOf(':') + 1).Trim().TrimEnd('%');
+
+                if (ushort.TryParse(numeric_part, out ushort capacity))
+                {
+                    battery.MaximumCapacity = capacity;
+                }
+            }
+        }
+    };
+
+        Dictionary<string, Action<string>> accharger_property_map = new Dictionary<string, Action<string>>
+    {
+        { "Wattage (W)", value =>
+            {
+                if (int.TryParse(value, out int wattage))
+                {
+                    battery.ACCharger.Wattage = wattage;
+                }
+            }
+        },
+        { "Name", value => battery.ACCharger.Name = value },
+        { "Manufacturer", value => battery.ACCharger.Manufacturer = value },
+        { "Serial Number", value => battery.ACCharger.SerialNumber = value },
+        { "Hardware Version", value => battery.ACCharger.HardwareVersion = value },
+        { "Firmware Version", value => battery.ACCharger.FirmwareVersion = value },
+        { "Family", value => battery.ACCharger.Family = value },
+        { "ID", value =>
+            {
+                if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    battery.ACCharger.ID = int.TryParse(value.Substring(2),
+                                                        System.Globalization.NumberStyles.HexNumber,
+                                                        null, out int id) ? id : 0;
+                }
+            }
+        }
+    };
+        bool parsing_accharger = false;
+
+        foreach (string line in lines)
         {
-            battery.EstimatedChargeRemaining = estimatedChargeRemaining;
+            string trimmed_line = line.Trim();
+
+            if (trimmed_line.Equals("AC Charger Information:", StringComparison.OrdinalIgnoreCase))
+            {
+                parsing_accharger = true;
+                continue;
+            }
+            else if (parsing_accharger && (string.IsNullOrWhiteSpace(trimmed_line) || !trimmed_line.Contains(":")))
+            {
+                parsing_accharger = false;
+                continue;
+            }
+
+            string[] parts = trimmed_line.Split(new[] { ':' }, 2);
+
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+
+            string key = parts[0].Trim();
+            string value = parts[1].Trim();
+
+            if (parsing_accharger)
+            {
+                if (accharger_property_map.TryGetValue(key, out Action<string>? ac_action))
+                {
+                    ac_action(value);
+                }
+            }
+            else
+            {
+                if (battery_property_map.TryGetValue(key, out Action<string>? battery_action))
+                {
+                    battery_action(value);
+                }
+            }
         }
 
-        Match timeMatch = Regex.Match(processOutput, @"(\d+):(\d+)(?=\s)");
-        if (timeMatch.Success && uint.TryParse(timeMatch.Groups[1].Value, out uint hours) && uint.TryParse(timeMatch.Groups[2].Value, out uint minutes))
+        string pmset_output = ProcessInfo.ReadProcessOut("pmset", "-g batt");
+
+        Match status_match = Regex.Match(pmset_output, @"'(.*?)'");
+
+        if (status_match.Success)
         {
-            battery.EstimatedRunTime = (hours * 60) + minutes;
+            battery.StatusDescription = status_match.Groups[1].Value;
+        }
+
+        Match time_match = Regex.Match(pmset_output, @"(\d+:\d+)\s*(remaining|to charge)");
+
+        if (time_match.Success && TimeSpan.TryParse(time_match.Groups[1].Value, out TimeSpan time_span))
+        {
+            uint total_minutes = (uint)time_span.TotalMinutes;
+
+            if (time_match.Groups[2].Value == "remaining")
+            {
+                battery.EstimatedRunTimeMinutes = total_minutes;
+            }
+            else if (time_match.Groups[2].Value == "to charge")
+            {
+                battery.TimeToFullChargeMinutes = total_minutes;
+            }
         }
 
         return new List<Battery> { battery };
