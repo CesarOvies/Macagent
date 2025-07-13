@@ -1,49 +1,53 @@
-﻿using System;
-
-// https://docs.microsoft.com/en-us/windows/win32/cimwin32prov/win32-battery
+﻿// https://docs.microsoft.com/en-us/windows/win32/cimwin32prov/win32-battery
 
 namespace MacAgent.Components;
 
 public class Battery
 {
-    public UInt32 FullChargeCapacity { get; set; }
+    public string SerialNumber { get; set; } = string.Empty;
 
-    public UInt32 DesignCapacity { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
 
-    public UInt16 BatteryStatus { get; set; }
+    public string FirmwareVersion { get; set; } = string.Empty;
 
-    public UInt16 EstimatedChargeRemaining { get; set; }
+    public string HardwareRevision { get; set; } = string.Empty;
 
-    public UInt32 EstimatedRunTime { get; set; }
+    public bool IsCharging { get; set; }
 
-    public UInt32 ExpectedLife { get; set; }
+    public bool IsFullyCharged { get; set; }
 
-    public UInt32 MaxRechargeTime { get; set; }
+    public ushort StateOfCharge { get; set; }
 
-    public UInt32 TimeOnBattery { get; set; }
+    public uint CycleCount { get; set; }
 
-    public UInt32 TimeToFullCharge { get; set; }
+    public string Condition { get; set; } = string.Empty;
 
-    private string _batteryStatusDescription = string.Empty;
+    public ushort MaximumCapacity { get; set; }
 
-    public string BatteryStatusDescription
-    {
-        get => !string.IsNullOrEmpty(_batteryStatusDescription) ? _batteryStatusDescription : BatteryStatus switch
-        {
-            1 => "The battery is discharging",
-            2 => "The system has access to AC so no battery is being discharged. However, the battery is not necessarily charging.",
-            3 => "Fully Charged",
-            4 => "Low",
-            5 => "Critical",
-            6 => "Charging",
-            7 => "Charging and High",
-            8 => "Charging and Low",
-            9 => "Charging and Critical",
-            10 => "No battery is installed",
-            11 => "Partially Charged",
-            _ => string.Empty
-        };
+    public uint EstimatedRunTimeMinutes { get; set; }
 
-        set => _batteryStatusDescription = value;
-    }
+    public uint TimeToFullChargeMinutes { get; set; }
+
+    public string StatusDescription { get; set; } = string.Empty;
+
+    public ACCharger ACCharger { get; set; } = new ACCharger();
 }
+
+public class ACCharger()
+{
+    public int ID { get; set; }
+
+    public int Wattage { get; set; }
+
+    public string Family { get; set; } = string.Empty;
+
+    public string SerialNumber { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Manufacturer { get; set; } = string.Empty;
+
+    public string HardwareVersion { get; set; } = string.Empty;
+
+    public string FirmwareVersion { get; set; } = string.Empty;
+};
