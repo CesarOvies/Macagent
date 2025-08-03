@@ -74,7 +74,6 @@ public class HardwareInfo
         }
         catch (Exception)
         {
-            // Log da exceção
         }
 
         return computerSystem;
@@ -99,7 +98,7 @@ public class HardwareInfo
         string cpu_name = brand_string.Split('@')[0].Trim();
         string nperf_levels = ProcessInfo.ReadProcessOut("sysctl", "-n hw.nperflevels");
         uint.TryParse(nperf_levels, out uint nperf_levels_out);
-        List<CPU> cpu_list = new List<CPU>();
+        List<CPU> cpu_list = [];
 
         if (nperf_levels_out > 1)
         {
@@ -170,12 +169,10 @@ public class HardwareInfo
 
                 if (batteryNode != null)
                 {
-                    // 2. Extrai informações dos sub-dicionários aninhados
                     XElement? chargeInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_charge_info")?.NextNode as XElement;
                     XElement? healthInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_health_info")?.NextNode as XElement;
                     XElement? modelInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_model_info")?.NextNode as XElement;
 
-                    // Preenchendo a partir do sub-dicionário de carga
                     if (chargeInfo != null)
                     {
                         if (ushort.TryParse(GetValueFromKey(chargeInfo, "sppower_battery_state_of_charge"), out ushort charge))
@@ -185,7 +182,6 @@ public class HardwareInfo
                         battery.IsCharging = GetValueFromKey(chargeInfo, "sppower_battery_is_charging")?.ToUpper() == "TRUE";
                     }
 
-                    // Preenchendo a partir do sub-dicionário de saúde
                     if (healthInfo != null)
                     {
                         if (uint.TryParse(GetValueFromKey(healthInfo, "sppower_battery_cycle_count"), out uint cycles))
@@ -193,8 +189,6 @@ public class HardwareInfo
                             battery.CycleCount = cycles;
                         }
                         battery.Condition = GetValueFromKey(healthInfo, "sppower_battery_health");
-
-                        // Extrai apenas o número da string "100%"
                         string? maxCapacityStr = GetValueFromKey(healthInfo, "sppower_battery_health_maximum_capacity")?.Replace("%", "");
 
                         if (ushort.TryParse(maxCapacityStr, out ushort maxCapacity))
@@ -203,7 +197,6 @@ public class HardwareInfo
                         }
                     }
 
-                    // Preenchendo a partir do sub-dicionário de modelo
                     if (modelInfo != null)
                     {
                         battery.SerialNumber = GetValueFromKey(modelInfo, "sppower_battery_serial_number");
@@ -213,7 +206,6 @@ public class HardwareInfo
                     }
                 }
 
-                // Encontra as informações do carregador em seu próprio dicionário
                 XElement? chargerInfo = items.FirstOrDefault(d => GetValueFromKey(d, "_name") == "sppower_ac_charger_information");
 
                 if (chargerInfo != null)
@@ -275,11 +267,11 @@ public class HardwareInfo
 
     public static List<Drive> GetDrive()
     {
-        Dictionary<string, Drive> drivesDictionary = new Dictionary<string, Drive>();
+        Dictionary<string, Drive> drivesDictionary = [];
 
         try
         {
-            List<string> physicalDriveDataTypes = new List<string> { "SPNVMeDataType", "SPSerialATADataType" };
+            List<string> physicalDriveDataTypes = ["SPNVMeDataType", "SPSerialATADataType"];
 
             foreach (string dataType in physicalDriveDataTypes)
             {
@@ -377,7 +369,7 @@ public class HardwareInfo
 
     public static List<Keyboard> GetKeyboard()
     {
-        List<Keyboard> keyboards = new List<Keyboard>();
+        List<Keyboard> keyboards = [];
         try
         {
             string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPHIDDeviceDataType -xml");
@@ -407,35 +399,26 @@ public class HardwareInfo
 
     public static List<Memory> GetMemory()
     {
-        List<Memory> memory_list = new List<Memory>();
+        List<Memory> memory_list = [];
         try
         {
             string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPMemoryDataType -xml");
             if (string.IsNullOrWhiteSpace(xmlOutput)) return memory_list;
 
             XDocument doc = XDocument.Parse(xmlOutput);
-
-            // --- INÍCIO DA CORREÇÃO ---
-
-            // 1. Encontra o dicionário principal que contém os dados do relatório.
             XElement? rootDict = doc.Root?.Element("array")?.Element("dict");
             if (rootDict == null) return memory_list;
 
-            // 2. Dentro dele, encontra a chave "_items". O nó seguinte a ela é o array com os módulos de memória.
             XElement? itemsKey = rootDict.Elements("key").FirstOrDefault(k => k.Value == "_items");
 
             if (itemsKey != null && itemsKey.NextNode is XElement memoryArray)
             {
-                // 3. Cada <dict> dentro deste array é um módulo de memória.
                 IEnumerable<XElement> memoryModules = memoryArray.Elements("dict");
-
-                // --- FIM DA CORREÇÃO ---
 
                 foreach (XElement node in memoryModules)
                 {
                     Memory memory = new Memory
                     {
-                        // A função ExtractSizeInBytes ainda é útil aqui, pois o XML retorna "8 GB", "16 GB", etc.
                         Capacity = ExtractSizeInBytes(GetValueFromKey(node, "dimm_size") ?? "0"),
                         Manufacturer = GetValueFromKey(node, "dimm_manufacturer"),
                         PartNumber = GetValueFromKey(node, "dimm_part_number"),
@@ -443,7 +426,6 @@ public class HardwareInfo
                         Type = GetValueFromKey(node, "dimm_type")
                     };
 
-                    // Extrai a velocidade, que vem como "5200 MT/s"
                     string? speedStr = GetValueFromKey(node, "dimm_speed");
                     if (!string.IsNullOrEmpty(speedStr) && uint.TryParse(speedStr.Split(' ')[0], out uint speed))
                     {
@@ -463,7 +445,7 @@ public class HardwareInfo
 
     public static List<Components.Monitor> GetMonitor()
     {
-        List<Components.Monitor> monitor_list = new List<Components.Monitor>();
+        List<Components.Monitor> monitor_list = [];
 
         try
         {
