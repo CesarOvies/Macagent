@@ -7,11 +7,11 @@ namespace MacAgent.Components;
 
 public class Monitor
 {
-    public string Caption { get; set; } = string.Empty;
+    public string Vendor { get; set; } = string.Empty;
 
-    public string Description { get; set; } = string.Empty;
+    public bool Main { get; set; }
 
-    public string MonitorManufacturer { get; set; } = string.Empty;
+    public bool Mirror { get; set; }
 
     public string MonitorType { get; set; } = string.Empty;
 
@@ -21,20 +21,18 @@ public class Monitor
 
     public bool Active { get; set; }
 
-    public string ManufacturerName { get; set; } = string.Empty;
-
     public string ProductCodeID { get; set; } = string.Empty;
 
     public string SerialNumberID { get; set; } = string.Empty;
 
-    public string UserFriendlyName { get; set; } = string.Empty;
+    public string ConnectionType { get; set; } = string.Empty;
 
-    public UInt16 WeekOfManufacture { get; set; }
+    public ushort WeekOfManufacture { get; set; }
 
-    public UInt16 YearOfManufacture { get; set; }
+    public ushort YearOfManufacture { get; set; }
 }
 
-public struct ScreenResolution
+public readonly struct ScreenResolution
 {
     public uint Width { get; }
     public uint Height { get; }
@@ -44,6 +42,4 @@ public struct ScreenResolution
         Width = width;
         Height = height;
     }
-
-    public override readonly string ToString() => $"{Width}x{Height}";
 }

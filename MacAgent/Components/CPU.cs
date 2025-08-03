@@ -21,8 +21,6 @@ public class CPU
 
     public UInt32 L3CacheSize { get; set; }
 
-    public string Manufacturer { get; set; } = string.Empty;
-
     public UInt32 MaxClockSpeed { get; set; }
 
     public string Name { get; set; } = string.Empty;
@@ -30,12 +28,4 @@ public class CPU
     public UInt32 NumberOfCores { get; set; }
 
     public UInt32 NumberOfLogicalProcessors { get; set; }
-
-    public string ProcessorId { get; set; } = string.Empty;
-
-    public string SocketDesignation { get; set; } = string.Empty;
-
-    public Boolean VirtualizationFirmwareEnabled { get; set; }
-
-    public UInt64 PercentProcessorTime { get; set; }
 }

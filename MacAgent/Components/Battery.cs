@@ -14,8 +14,6 @@ public class Battery
 
     public bool IsCharging { get; set; }
 
-    public bool IsFullyCharged { get; set; }
-
     public ushort StateOfCharge { get; set; }
 
     public uint CycleCount { get; set; }
@@ -30,7 +28,7 @@ public class Battery
 
     public string StatusDescription { get; set; } = string.Empty;
 
-    public ACCharger ACCharger { get; set; } = new ACCharger();
+    public ACCharger? ACCharger { get; set; }
 }
 
 public class ACCharger()

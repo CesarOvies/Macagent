@@ -1,58 +1,83 @@
 using System.Data;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using MacAgent.Components;
 
 namespace MacAgent.Services;
 
 public class HardwareInfo
 {
+    private static string GetValueFromKey(XElement dictNode, string key)
+    {
+        XElement? keyElement = dictNode.Elements("key").FirstOrDefault(k => k.Value == key);
+
+        if (keyElement != null && keyElement.NextNode is XElement valueElement)
+        {
+            if (valueElement.Name == "true" || valueElement.Name == "false")
+            {
+                return valueElement.Name.LocalName;
+            }
+
+            return valueElement.Value;
+        }
+        return string.Empty;
+    }
+
+    private static ulong ExtractSizeInBytes(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return 0;
+
+        Match match = Regex.Match(input, @"(\d+)\s*([KMGT]B)", RegexOptions.IgnoreCase);
+
+        if (!match.Success || !ulong.TryParse(match.Groups[1].Value, out ulong size))
+        {
+            return 0;
+        }
+
+        Dictionary<string, ulong> multipliers = new Dictionary<string, ulong>
+    {
+        { "KB", 1024UL },
+        { "MB", 1024UL * 1024 },
+        { "GB", 1024UL * 1024 * 1024 },
+        { "TB", 1024UL * 1024 * 1024 * 1024 }
+    };
+
+        string unit = match.Groups[2].Value.ToUpper();
+        return multipliers.TryGetValue(unit, out ulong multiplier) ? size * multiplier : size;
+    }
+
     public static ComputerSystem GetComputer()
     {
-        ComputerSystem computer_system = new ComputerSystem
-        {
-            Vendor = "Apple"
-        };
+        ComputerSystem computerSystem = new ComputerSystem { Vendor = "Apple Inc." };
 
         try
         {
-            List<string> lines = [.. ProcessInfo.ReadProcessOut("system_profiler", "SPHardwareDataType").Split('\n', StringSplitOptions.TrimEntries)];
+            string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPHardwareDataType -xml");
+            if (string.IsNullOrWhiteSpace(xmlOutput)) return computerSystem;
 
-            foreach (string line in lines)
+            XDocument doc = XDocument.Parse(xmlOutput);
+            XElement? items = doc.Descendants("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement;
+            XElement? hardwareInfo = items?.Elements("dict").FirstOrDefault();
+
+            if (hardwareInfo != null)
             {
-                if (line.StartsWith("Model Name: "))
-                {
-                    string _line = line.Replace("Model Name: ", string.Empty);
-                    computer_system.Caption = _line;
-                    computer_system.Name = _line;
-                    computer_system.SubType = GetComputerSubType(_line);
-                }
-                else if (line.StartsWith("Model Identifier: "))
-                {
-                    computer_system.Description = line.Replace("Model Identifier: ", string.Empty);
-                }
-                else if (line.StartsWith("Serial Number (system): "))
-                {
-                    computer_system.IdentifyingNumber = line.Replace("Serial Number (system): ", string.Empty);
-                }
-                else if (line.StartsWith("Hardware UUID"))
-                {
-                    computer_system.UUID = line.Replace("Hardware UUID: ", string.Empty);
-                }
-                else if (line.StartsWith("Model Number: "))
-                {
-                    computer_system.SKUNumber = line.Replace("Model Number: ", string.Empty);
-                }
-                else if (line.StartsWith("System Firmware Version: "))
-                {
-                    computer_system.Version = line.Replace("System Firmware Version: ", string.Empty);
-                }
+                string modelName = GetValueFromKey(hardwareInfo, "machine_name") ?? "Unknown";
+                computerSystem.Caption = modelName;
+                computerSystem.Name = modelName;
+                computerSystem.SubType = GetComputerSubType(modelName);
+                computerSystem.Description = GetValueFromKey(hardwareInfo, "machine_model");
+                computerSystem.IdentifyingNumber = GetValueFromKey(hardwareInfo, "serial_number");
+                computerSystem.UUID = GetValueFromKey(hardwareInfo, "platform_UUID");
+                computerSystem.SKUNumber = GetValueFromKey(hardwareInfo, "model_number");
+                computerSystem.Version = GetValueFromKey(hardwareInfo, "boot_rom_version");
             }
         }
         catch (Exception)
         {
+            // Log da exceção
         }
 
-        return computer_system;
+        return computerSystem;
     }
 
     private static string GetComputerSubType(string model_name)
@@ -61,7 +86,8 @@ public class HardwareInfo
             return "Laptop";
         else if (model_name.Contains("iMac", StringComparison.OrdinalIgnoreCase) ||
                  model_name.Contains("Mac mini", StringComparison.OrdinalIgnoreCase) ||
-                 model_name.Contains("Mac Pro", StringComparison.OrdinalIgnoreCase))
+                 model_name.Contains("Mac Pro", StringComparison.OrdinalIgnoreCase) ||
+                 model_name.Contains("Mac Studio", StringComparison.OrdinalIgnoreCase))
             return "Desktop";
         else
             return "Other (Apple Device)";
@@ -124,122 +150,103 @@ public class HardwareInfo
     public static List<Battery> GetBattery()
     {
         Battery battery = new Battery();
-        string profiler_output = ProcessInfo.ReadProcessOut("system_profiler", "SPPowerDataType");
-        string[] lines = profiler_output.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-        Dictionary<string, Action<string>> battery_property_map = new Dictionary<string, Action<string>>
-    {
-        { "Serial Number", value => battery.SerialNumber = value },
-        { "Device Name", value => battery.DeviceName = value },
-        { "Firmware Version", value => battery.FirmwareVersion = value },
-        { "Hardware Revision", value => battery.HardwareRevision = value },
-        { "Fully Charged", value => battery.IsFullyCharged = value.Equals("Yes", StringComparison.OrdinalIgnoreCase) },
-        { "Charging", value => battery.IsCharging = value.Equals("Yes", StringComparison.OrdinalIgnoreCase) },
-        { "State of Charge (%)", value =>
-            {
-                string porcentage = value.Substring(value.IndexOf(':') + 1).Trim();
-
-                if(ushort.TryParse(porcentage, out ushort parse))
-                {
-                    battery.StateOfCharge = parse;
-                }
-            }
-        },
-        { "Cycle Count", value =>
-            {
-                string numeric_part = value.Substring(value.IndexOf(':') + 1).Trim().TrimEnd('%');
-
-                if (uint.TryParse(numeric_part, out uint parse))
-                {
-                    battery.CycleCount = parse;
-                }
-            }
-        },
-        { "Condition", value => battery.Condition = value },
-        { "Maximum Capacity", value =>
-            {
-                string numeric_part = value.Substring(value.IndexOf(':') + 1).Trim().TrimEnd('%');
-
-                if (ushort.TryParse(numeric_part, out ushort capacity))
-                {
-                    battery.MaximumCapacity = capacity;
-                }
-            }
-        }
-    };
-
-        Dictionary<string, Action<string>> accharger_property_map = new Dictionary<string, Action<string>>
-    {
-        { "Wattage (W)", value =>
-            {
-                if (int.TryParse(value, out int wattage))
-                {
-                    battery.ACCharger.Wattage = wattage;
-                }
-            }
-        },
-        { "Name", value => battery.ACCharger.Name = value },
-        { "Manufacturer", value => battery.ACCharger.Manufacturer = value },
-        { "Serial Number", value => battery.ACCharger.SerialNumber = value },
-        { "Hardware Version", value => battery.ACCharger.HardwareVersion = value },
-        { "Firmware Version", value => battery.ACCharger.FirmwareVersion = value },
-        { "Family", value => battery.ACCharger.Family = value },
-        { "ID", value =>
-            {
-                if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                {
-                    battery.ACCharger.ID = int.TryParse(value.Substring(2),
-                                                        System.Globalization.NumberStyles.HexNumber,
-                                                        null, out int id) ? id : 0;
-                }
-            }
-        }
-    };
-        bool parsing_accharger = false;
-
-        foreach (string line in lines)
+        try
         {
-            string trimmed_line = line.Trim();
+            string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPPowerDataType -xml");
 
-            if (trimmed_line.Equals("AC Charger Information:", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(xmlOutput))
             {
-                parsing_accharger = true;
-                continue;
-            }
-            else if (parsing_accharger && (string.IsNullOrWhiteSpace(trimmed_line) || !trimmed_line.Contains(":")))
-            {
-                parsing_accharger = false;
-                continue;
+                return [battery];
             }
 
-            string[] parts = trimmed_line.Split(new[] { ':' }, 2);
+            XDocument doc = XDocument.Parse(xmlOutput);
+            IEnumerable<XElement>? items = (doc.Descendants("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?.Elements("dict");
 
-            if (parts.Length != 2)
+            if (items != null)
             {
-                continue;
-            }
+                // 1. Encontra o dicionário principal da bateria
+                XElement? batteryNode = items.FirstOrDefault(d => GetValueFromKey(d, "_name") == "spbattery_information");
 
-            string key = parts[0].Trim();
-            string value = parts[1].Trim();
-
-            if (parsing_accharger)
-            {
-                if (accharger_property_map.TryGetValue(key, out Action<string>? ac_action))
+                if (batteryNode != null)
                 {
-                    ac_action(value);
+                    // 2. Extrai informações dos sub-dicionários aninhados
+                    XElement? chargeInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_charge_info")?.NextNode as XElement;
+                    XElement? healthInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_health_info")?.NextNode as XElement;
+                    XElement? modelInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_model_info")?.NextNode as XElement;
+
+                    // Preenchendo a partir do sub-dicionário de carga
+                    if (chargeInfo != null)
+                    {
+                        if (ushort.TryParse(GetValueFromKey(chargeInfo, "sppower_battery_state_of_charge"), out ushort charge))
+                        {
+                            battery.StateOfCharge = charge;
+                        }
+                        battery.IsCharging = GetValueFromKey(chargeInfo, "sppower_battery_is_charging")?.ToUpper() == "TRUE";
+                    }
+
+                    // Preenchendo a partir do sub-dicionário de saúde
+                    if (healthInfo != null)
+                    {
+                        if (uint.TryParse(GetValueFromKey(healthInfo, "sppower_battery_cycle_count"), out uint cycles))
+                        {
+                            battery.CycleCount = cycles;
+                        }
+                        battery.Condition = GetValueFromKey(healthInfo, "sppower_battery_health");
+
+                        // Extrai apenas o número da string "100%"
+                        string? maxCapacityStr = GetValueFromKey(healthInfo, "sppower_battery_health_maximum_capacity")?.Replace("%", "");
+
+                        if (ushort.TryParse(maxCapacityStr, out ushort maxCapacity))
+                        {
+                            battery.MaximumCapacity = maxCapacity;
+                        }
+                    }
+
+                    // Preenchendo a partir do sub-dicionário de modelo
+                    if (modelInfo != null)
+                    {
+                        battery.SerialNumber = GetValueFromKey(modelInfo, "sppower_battery_serial_number");
+                        battery.DeviceName = GetValueFromKey(modelInfo, "sppower_battery_device_name");
+                        battery.FirmwareVersion = GetValueFromKey(modelInfo, "sppower_battery_firmware_version");
+                        battery.HardwareRevision = GetValueFromKey(modelInfo, "sppower_battery_hardware_revision");
+                    }
+                }
+
+                // Encontra as informações do carregador em seu próprio dicionário
+                XElement? chargerInfo = items.FirstOrDefault(d => GetValueFromKey(d, "_name") == "sppower_ac_charger_information");
+
+                if (chargerInfo != null)
+                {
+                    bool charger_connected = GetValueFromKey(chargerInfo, "sppower_battery_charger_connected")?.ToUpper() == "TRUE";
+
+                    if (charger_connected)
+                    {
+                        int.TryParse(GetValueFromKey(chargerInfo, "sppower_ac_charger_ID").Replace("0x", ""),
+                        System.Globalization.NumberStyles.HexNumber,
+                        System.Globalization.CultureInfo.InvariantCulture, out int id);
+                        int.TryParse(GetValueFromKey(chargerInfo, "sppower_ac_charger_watts"), out int wattage);
+
+                        battery.ACCharger = new ACCharger()
+                        {
+                            Name = GetValueFromKey(chargerInfo, "sppower_ac_charger_name"),
+                            SerialNumber = GetValueFromKey(chargerInfo, "sppower_ac_charger_serial_number"),
+                            Family = GetValueFromKey(chargerInfo, "sppower_ac_charger_family"),
+                            Manufacturer = GetValueFromKey(chargerInfo, "sppower_ac_charger_manufacturer"),
+                            HardwareVersion = GetValueFromKey(chargerInfo, "sppower_ac_charger_hardware_version"),
+                            FirmwareVersion = GetValueFromKey(chargerInfo, "sppower_ac_charger_firmware_version"),
+                            ID = id,
+                            Wattage = wattage
+                        };
+                    }
                 }
             }
-            else
-            {
-                if (battery_property_map.TryGetValue(key, out Action<string>? battery_action))
-                {
-                    battery_action(value);
-                }
-            }
+        }
+        catch (Exception)
+        {
         }
 
         string pmset_output = ProcessInfo.ReadProcessOut("pmset", "-g batt");
-
         Match status_match = Regex.Match(pmset_output, @"'(.*?)'");
 
         if (status_match.Success)
@@ -263,211 +270,313 @@ public class HardwareInfo
             }
         }
 
-        return new List<Battery> { battery };
+        return [battery];
     }
 
     public static List<Drive> GetDrive()
     {
-        string process_out = ProcessInfo.ReadProcessOut("lshw", "-class disk");
-        string[] device_blocks = process_out.Split(new[] { "*-" }, StringSplitOptions.RemoveEmptyEntries);
-        List<Drive> drives = new List<Drive>();
+        Dictionary<string, Drive> drivesDictionary = new Dictionary<string, Drive>();
 
-        foreach (string block in device_blocks)
+        try
         {
-            if (!block.Trim().StartsWith("disk") && !block.Trim().StartsWith("cdrom"))
+            List<string> physicalDriveDataTypes = new List<string> { "SPNVMeDataType", "SPSerialATADataType" };
+
+            foreach (string dataType in physicalDriveDataTypes)
             {
-                continue;
-            }
+                string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", $"{dataType} -xml");
+                if (string.IsNullOrWhiteSpace(xmlOutput)) continue;
 
-            Drive drive = new Drive();
-            string[] lines = block.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+                XDocument doc = XDocument.Parse(xmlOutput);
+                IEnumerable<XElement>? controllerNodes = (doc.Descendants("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?.Elements("dict");
+                if (controllerNodes == null) continue;
 
-            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
-        {
-            { "description:", value => drive.Description = value },
-            { "product:",     value => drive.Model = drive.Caption = value },
-            { "vendor:",      value => drive.Manufacturer = value },
-            { "logical name:",value => drive.Name = value },
-            { "version:",     value => drive.FirmwareRevision = value },
-            { "serial:",      value => drive.SerialNumber = value },
-            { "size:",        value => drive.Size = ExtractSizeInBytes(value) }
-        };
-
-            foreach (string line in lines)
-            {
-                string trimmed_line = line.Trim();
-                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmed_line.StartsWith(p.Key));
-                if (mapping.Key != null)
+                foreach (XElement cNode in controllerNodes)
                 {
-                    string value = trimmed_line[mapping.Key.Length..].Trim();
-                    mapping.Value(value);
+                    IEnumerable<XElement>? driveNodes = (cNode.Elements("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?.Elements("dict");
+                    if (driveNodes == null) continue;
+
+                    foreach (XElement pNode in driveNodes)
+                    {
+                        string model = GetValueFromKey(pNode, "device_model") ?? GetValueFromKey(pNode, "_name") ?? "Unknown";
+
+                        if (drivesDictionary.ContainsKey(model)) continue;
+
+                        Drive drive = new Drive
+                        {
+                            Model = model,
+                            Name = GetValueFromKey(pNode, "_name"),
+                            MountPoint = GetValueFromKey(pNode, "bsd_name"),
+                            IsRemovible = GetValueFromKey(pNode, "removable_media").Equals("yes", StringComparison.CurrentCultureIgnoreCase),
+                            SerialNumber = GetValueFromKey(pNode, "device_serial"),
+                            FirmwareRevision = GetValueFromKey(pNode, "device_revision")
+                        };
+
+                        ulong.TryParse(GetValueFromKey(pNode, "size_in_bytes"), out ulong size);
+                        drive.Size = size;
+
+                        drivesDictionary.TryAdd(model, drive);
+                    }
                 }
             }
-            drives.Add(drive);
+            string storageXmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPStorageDataType -xml");
+
+            if (!string.IsNullOrWhiteSpace(storageXmlOutput))
+            {
+                XDocument storageDoc = XDocument.Parse(storageXmlOutput);
+                IEnumerable<XElement>? volumeNodes = (storageDoc.Descendants("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?.Elements("dict");
+
+                if (volumeNodes != null)
+                {
+                    foreach (XElement vNode in volumeNodes)
+                    {
+                        XElement? physicalDriveNode = vNode.Elements("key").FirstOrDefault(k => k.Value == "physical_drive")?.NextNode as XElement;
+                        if (physicalDriveNode == null) continue;
+
+                        string physicalDriveModel = GetValueFromKey(physicalDriveNode, "device_name") ?? "Unknown Drive";
+
+                        if (!drivesDictionary.TryGetValue(physicalDriveModel, out Drive? parentDrive))
+                        {
+                            parentDrive = new Drive { Model = physicalDriveModel };
+                            drivesDictionary.Add(physicalDriveModel, parentDrive);
+                        }
+
+                        Volume volume = new Volume
+                        {
+                            VolumeName = GetValueFromKey(vNode, "_name"),
+                            Name = GetValueFromKey(vNode, "_name"),
+                            FileSystem = GetValueFromKey(vNode, "file_system"),
+                            VolumeSerialNumber = GetValueFromKey(vNode, "volume_uuid"),
+                        };
+
+                        ulong.TryParse(GetValueFromKey(vNode, "size_in_bytes"), out ulong volSize);
+                        volume.Size = volSize;
+                        ulong.TryParse(GetValueFromKey(vNode, "free_space_in_bytes"), out ulong volFree);
+                        volume.FreeSpaceBytes = volFree;
+
+                        Partition partition = new Partition
+                        {
+                            Caption = GetValueFromKey(vNode, "bsd_name"),
+                            Name = GetValueFromKey(vNode, "bsd_name"),
+                            Size = volSize,
+                            BootPartition = GetValueFromKey(vNode, "mount_point") == "/"
+                        };
+
+                        partition.VolumeList.Add(volume);
+                        parentDrive.PartitionList.Add(partition);
+                        parentDrive.Partitions++;
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
         }
 
-        return drives;
+        return drivesDictionary.Values.ToList();
     }
 
-    private static ulong ExtractSizeInBytes(string input)
+    public static List<Keyboard> GetKeyboard()
     {
-        Match match = Regex.Match(input, @"(\d+)\s*([KMGT]B)", RegexOptions.IgnoreCase);
-
-        if (!match.Success || !ulong.TryParse(match.Groups[1].Value, out ulong size))
+        List<Keyboard> keyboards = new List<Keyboard>();
+        try
         {
-            return 0;
+            string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPHIDDeviceDataType -xml");
+            if (string.IsNullOrWhiteSpace(xmlOutput)) return keyboards;
+
+            XDocument doc = XDocument.Parse(xmlOutput);
+            IEnumerable<XElement>? items = (doc.Descendants("key").FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?.Elements("dict");
+
+            if (items != null)
+            {
+                keyboards = items
+                    .Where(d => (GetValueFromKey(d, "product") ?? "").Contains("Keyboard", StringComparison.OrdinalIgnoreCase))
+                    .Select(d => new Keyboard
+                    {
+                        Caption = GetValueFromKey(d, "product"),
+                        Description = GetValueFromKey(d, "product"),
+                        Name = GetValueFromKey(d, "_name")
+                    })
+                    .ToList();
+            }
         }
-
-        Dictionary<string, ulong> multipliers = new Dictionary<string, ulong>
-    {
-        { "KB", 1024UL },
-        { "MB", 1024UL * 1024 },
-        { "GB", 1024UL * 1024 * 1024 },
-        { "TB", 1024UL * 1024 * 1024 * 1024 }
-    };
-
-        string unit = match.Groups[2].Value.ToUpper();
-
-        return multipliers.TryGetValue(unit, out ulong multiplier) ? size * multiplier : size;
-    }
-
-    private static List<Keyboard> GetKeyboard()
-    {
-        string read_process_out = ProcessInfo.ReadProcessOut("cat", "/proc/bus/input/devices");
-        string[] input_lines = read_process_out.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-        Regex regex = new Regex("N: Name=\"([^\"]+)\"", RegexOptions.Compiled);
-
-        return input_lines
-        .Where(line => line.Contains("keyboard", StringComparison.OrdinalIgnoreCase) && line.Trim().StartsWith("N: Name="))
-        .Select(line => regex.Match(line))
-        .Where(match => match.Success)
-        .Select(match => match.Groups[1].Value)
-        .Select(name => new Keyboard
+        catch (Exception)
         {
-            Caption = name,
-            Description = name,
-            Name = name
-        })
-        .ToList();
+        }
+        return keyboards;
     }
 
-    private static List<Memory> GetMemory()
+    public static List<Memory> GetMemory()
     {
-        string process_out = ProcessInfo.ReadProcessOut("system_profiler", "SPMemoryDataType");
-        string[] memory_blocks = Regex.Split(process_out, @"(?=Bank\s\d+/)", RegexOptions.Multiline);
         List<Memory> memory_list = new List<Memory>();
-
-        foreach (string block in memory_blocks)
+        try
         {
-            string trimmed_block = block.Trim();
+            string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", "SPMemoryDataType -xml");
+            if (string.IsNullOrWhiteSpace(xmlOutput)) return memory_list;
 
-            if (!trimmed_block.StartsWith("Bank"))
+            XDocument doc = XDocument.Parse(xmlOutput);
+
+            // --- INÍCIO DA CORREÇÃO ---
+
+            // 1. Encontra o dicionário principal que contém os dados do relatório.
+            XElement? rootDict = doc.Root?.Element("array")?.Element("dict");
+            if (rootDict == null) return memory_list;
+
+            // 2. Dentro dele, encontra a chave "_items". O nó seguinte a ela é o array com os módulos de memória.
+            XElement? itemsKey = rootDict.Elements("key").FirstOrDefault(k => k.Value == "_items");
+
+            if (itemsKey != null && itemsKey.NextNode is XElement memoryArray)
             {
-                continue;
-            }
+                // 3. Cada <dict> dentro deste array é um módulo de memória.
+                IEnumerable<XElement> memoryModules = memoryArray.Elements("dict");
 
-            Memory memory = new Memory();
-            string[] lines = trimmed_block.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
-        {
-            { "Size:", value => memory.Capacity = ExtractSizeInBytes(value) },
-            { "Type:", value =>
+                // --- FIM DA CORREÇÃO ---
+
+                foreach (XElement node in memoryModules)
                 {
-                    if (Enum.TryParse(value, out FormFactor tempFormFactor))
+                    Memory memory = new Memory
                     {
-                        memory.FormFactor = tempFormFactor;
-                    }
-                }
-            },
-            { "Speed:", value =>
-                {
-                    if (uint.TryParse(value.Split(' ')[0], out uint temp_speed))
+                        // A função ExtractSizeInBytes ainda é útil aqui, pois o XML retorna "8 GB", "16 GB", etc.
+                        Capacity = ExtractSizeInBytes(GetValueFromKey(node, "dimm_size") ?? "0"),
+                        Manufacturer = GetValueFromKey(node, "dimm_manufacturer"),
+                        PartNumber = GetValueFromKey(node, "dimm_part_number"),
+                        SerialNumber = GetValueFromKey(node, "dimm_serial_number"),
+                        Type = GetValueFromKey(node, "dimm_type")
+                    };
+
+                    // Extrai a velocidade, que vem como "5200 MT/s"
+                    string? speedStr = GetValueFromKey(node, "dimm_speed");
+                    if (!string.IsNullOrEmpty(speedStr) && uint.TryParse(speedStr.Split(' ')[0], out uint speed))
                     {
-                        memory.Speed = temp_speed;
+                        memory.Speed = speed;
                     }
-                }
-            },
-            { "Manufacturer:",  value => memory.Manufacturer = value },
-            { "Part Number:",   value => memory.PartNumber = value },
-            { "Serial Number:", value => memory.SerialNumber = value }
-        };
 
-            foreach (string line in lines)
-            {
-                string trimmed_line = line.Trim();
-                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmed_line.StartsWith(p.Key));
-
-                if (mapping.Key != null)
-                {
-                    string value = trimmed_line.Substring(mapping.Key.Length).Trim();
-                    mapping.Value(value);
+                    memory_list.Add(memory);
                 }
             }
-            memory_list.Add(memory);
+        }
+        catch (Exception)
+        {
         }
 
         return memory_list;
     }
 
-    private List<Components.Monitor> GetMonitor()
+    public static List<Components.Monitor> GetMonitor()
     {
-        string process_out = ProcessInfo.ReadProcessOut("system_profiler", "SPDisplaysDataType");
-        string[] device_blocks = Regex.Split(process_out, @"(?=^\s{4}[^\s].*:\s*$)", RegexOptions.Multiline);
         List<Components.Monitor> monitor_list = new List<Components.Monitor>();
 
-        foreach (string block in device_blocks)
+        try
         {
-            if (!block.Contains("Display Type:"))
+            string read_process_out = ProcessInfo.ReadProcessOut("system_profiler", "SPDisplaysDataType -xml");
+
+            if (string.IsNullOrWhiteSpace(read_process_out))
             {
-                continue;
+                return monitor_list;
             }
 
-            Components.Monitor monitor = new Components.Monitor();
-            string[] lines = block.Trim().Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            XDocument doc = XDocument.Parse(read_process_out);
+            XElement? items = doc.Descendants("key").FirstOrDefault(k => k.Value == "_items");
 
-            string? name_line = lines.FirstOrDefault();
-            if (name_line != null)
+            if (items != null && items.NextNode is XElement items_array)
             {
-                monitor.Name = name_line.Trim().TrimEnd(':');
-                monitor.Caption = monitor.Name;
-                monitor.Description = monitor.Name;
-                monitor.UserFriendlyName = monitor.Name;
-            }
-
-            Dictionary<string, Action<string>> property_map = new Dictionary<string, Action<string>>
-        {
-            { "Display Type:", value => monitor.MonitorType = value },
-            { "Online:", value => monitor.Active = value.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) },
-            { "Display Serial Number:", value => monitor.SerialNumberID = value },
-            { "Resolution:", value =>
+                foreach (XElement node in items_array.Elements("dict"))
                 {
-                    string resolution_part = value.Split(' ')[0];
-                    string[] dimensions = resolution_part.Split('x');
+                    XElement? displays_keys = node.Elements("key").FirstOrDefault(k => k.Value == "spdisplays_ndrvs");
 
-                    if (dimensions.Length == 2 &&
-                        uint.TryParse(dimensions[0].Trim(), out uint width) &&
-                        uint.TryParse(dimensions[1].Trim(), out uint height))
+                    if (displays_keys != null && displays_keys.NextNode is XElement displays_array)
                     {
-                        monitor.Resolution = new ScreenResolution(width, height);
+                        foreach (XElement monitor_node in displays_array.Elements("dict"))
+                        {
+                            Components.Monitor monitor = new()
+                            {
+                                Name = GetValueFromKey(monitor_node, "_name") ?? "Unknown",
+                                Vendor = GetVendorNameFromId(GetValueFromKey(monitor_node, "_spdisplays_display-vendor-id")),
+                                MonitorType = GetValueFromKey(monitor_node, "spdisplays_display_type").Replace("spdisplays_", ""),
+                                SerialNumberID = GetValueFromKey(monitor_node, "_spdisplays_display-serial-number"),
+                                ProductCodeID = GetValueFromKey(monitor_node, "_spdisplays_display-product-id"),
+                                Main = (GetValueFromKey(monitor_node, "spdisplays_main") ?? "no") == "spdisplays_yes",
+                                Active = (GetValueFromKey(monitor_node, "spdisplays_online") ?? "no") == "spdisplays_yes",
+                                Mirror = (GetValueFromKey(monitor_node, "spdisplays_mirror") ?? "off") == "spdisplays_on",
+                                WeekOfManufacture = ushort.TryParse(GetValueFromKey(monitor_node, "_spdisplays_display-week"), out ushort week) ? week : (ushort)0,
+                                YearOfManufacture = ushort.TryParse(GetValueFromKey(monitor_node, "_spdisplays_display-year"), out ushort year) ? year : (ushort)0,
+                            };
+
+                            string connection_type = GetValueFromKey(monitor_node, "spdisplays_connection_type").Replace("spdisplays_", "");
+
+                            if (string.IsNullOrWhiteSpace(connection_type))
+                            {
+                                connection_type = "external";
+                            }
+
+                            monitor.ConnectionType = connection_type;
+
+                            string resolution = GetValueFromKey(monitor_node, "_spdisplays_resolution");
+
+                            if (string.IsNullOrEmpty(resolution) == false)
+                            {
+                                string[] dimensions = Regex.Matches(resolution, @"\d+").Cast<Match>().Select(m => m.Value).ToArray();
+
+                                if (dimensions.Length >= 2 &&
+                                    uint.TryParse(dimensions[0], out uint width) &&
+                                    uint.TryParse(dimensions[1], out uint height))
+                                {
+                                    monitor.Resolution = new ScreenResolution(width, height);
+                                }
+                            }
+
+                            monitor_list.Add(monitor);
+                        }
                     }
                 }
             }
-        };
-
-            foreach (string line in lines.Skip(1))
-            {
-                string trimmedLine = line.Trim();
-                KeyValuePair<string, Action<string>> mapping = property_map.FirstOrDefault(p => trimmedLine.StartsWith(p.Key));
-
-                if (mapping.Key != null)
-                {
-                    string value = trimmedLine.Substring(mapping.Key.Length).Trim();
-                    mapping.Value(value);
-                }
-            }
-            monitor_list.Add(monitor);
+        }
+        catch (Exception)
+        {
         }
 
         return monitor_list;
     }
+
+    private static string GetVendorNameFromId(string vendor_id)
+    {
+        if (VendorIdMap.TryGetValue(vendor_id, out string? vendor_name))
+        {
+            return vendor_name;
+        }
+
+        return vendor_id;
+    }
+
+    private static readonly Dictionary<string, string> VendorIdMap = new(StringComparer.OrdinalIgnoreCase)
+{
+    { "0610", "Apple Inc." },
+    { "610", "Apple Inc." },
+    { "1025", "Acer" },
+    { "1043", "ASUS" },
+    { "10ac", "Dell" },
+    { "1e6d", "LG Electronics" },
+    { "15c3", "ViewSonic" },
+    { "1946", "BenQ" },
+    { "19ac", "Eizo" },
+    { "22f0", "HP Inc." },
+    { "3023", "Lenovo" },
+    { "38a3", "NEC" },
+    { "4c2d", "Samsung" },
+    { "0471", "Philips" },
+    { "05a3", "AOC" },
+    { "1002", "AMD (Advanced Micro Devices, Inc.)" },
+    { "10de", "NVIDIA Corporation" },
+    { "1102", "Creative Labs" },
+    { "1458", "GIGABYTE" },
+    { "1462", "MSI (Micro-Star International)" },
+    { "1b1c", "Corsair" },
+    { "8086", "Intel Corporation" },
+    { "10ec", "Realtek Semiconductor Corp." },
+    { "046d", "Logitech" },
+    { "104d", "Sony Corporation" },
+    { "1179", "Toshiba" },
+    { "1414", "Microsoft Corporation" },
+    { "1532", "Razer Inc." },
+    { "10f7", "Panasonic" }
+};
 }
