@@ -62,15 +62,11 @@ public class Drive
 {
     public List<Partition> PartitionList { get; set; } = new List<Partition>();
 
-    public string Caption { get; set; } = string.Empty;
-
-    public string Description { get; set; } = string.Empty;
+    public string MountPoint { get; set; } = string.Empty;
 
     public string FirmwareRevision { get; set; } = string.Empty;
 
-    public UInt32 Index { get; set; }
-
-    public string Manufacturer { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
 
     public string Model { get; set; } = string.Empty;
 
@@ -80,5 +76,7 @@ public class Drive
 
     public string SerialNumber { get; set; } = string.Empty;
 
-    public UInt64 Size { get; set; }
+    public ulong Size { get; set; }
+
+    public bool IsRemovible { get; set; }
 }
