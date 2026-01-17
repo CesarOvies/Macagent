@@ -530,35 +530,71 @@ public class HardwareInfo
     }
 
     private static readonly Dictionary<string, string> VendorIdMap = new(StringComparer.OrdinalIgnoreCase)
-{
-    { "0610", "Apple Inc." },
-    { "610", "Apple Inc." },
-    { "1025", "Acer" },
-    { "1043", "ASUS" },
-    { "10ac", "Dell" },
-    { "1e6d", "LG Electronics" },
-    { "15c3", "ViewSonic" },
-    { "1946", "BenQ" },
-    { "19ac", "Eizo" },
-    { "22f0", "HP Inc." },
-    { "3023", "Lenovo" },
-    { "38a3", "NEC" },
-    { "4c2d", "Samsung" },
-    { "0471", "Philips" },
-    { "05a3", "AOC" },
-    { "1002", "AMD (Advanced Micro Devices, Inc.)" },
-    { "10de", "NVIDIA Corporation" },
-    { "1102", "Creative Labs" },
-    { "1458", "GIGABYTE" },
-    { "1462", "MSI (Micro-Star International)" },
-    { "1b1c", "Corsair" },
-    { "8086", "Intel Corporation" },
-    { "10ec", "Realtek Semiconductor Corp." },
-    { "046d", "Logitech" },
-    { "104d", "Sony Corporation" },
-    { "1179", "Toshiba" },
-    { "1414", "Microsoft Corporation" },
-    { "1532", "Razer Inc." },
-    { "10f7", "Panasonic" }
-};
+    {
+        { "0610", "Apple Inc." },
+        { "610", "Apple Inc." },
+        { "1025", "Acer" },
+        { "1043", "ASUS" },
+        { "10ac", "Dell" },
+        { "1e6d", "LG Electronics" },
+        { "15c3", "ViewSonic" },
+        { "1946", "BenQ" },
+        { "19ac", "Eizo" },
+        { "22f0", "HP Inc." },
+        { "3023", "Lenovo" },
+        { "38a3", "NEC" },
+        { "4c2d", "Samsung" },
+        { "0471", "Philips" },
+        { "05a3", "AOC" },
+        { "1002", "AMD (Advanced Micro Devices, Inc.)" },
+        { "10de", "NVIDIA Corporation" },
+        { "1102", "Creative Labs" },
+        { "1458", "GIGABYTE" },
+        { "1462", "MSI (Micro-Star International)" },
+        { "1b1c", "Corsair" },
+        { "8086", "Intel Corporation" },
+        { "10ec", "Realtek Semiconductor Corp." },
+        { "046d", "Logitech" },
+        { "104d", "Sony Corporation" },
+        { "1179", "Toshiba" },
+        { "1414", "Microsoft Corporation" },
+        { "1532", "Razer Inc." },
+        { "10f7", "Panasonic" }
+    };
+
+    public static Motherboard GetMotherboard()
+    {
+        Motherboard motherboard = new()
+        {
+            Manufacturer = "Apple Inc."
+        };
+
+        try
+        {
+            string xml_output = ProcessInfo.ReadProcessOut("system_profiler", "SPHardwareDataType -xml");
+
+            if (string.IsNullOrWhiteSpace(xml_output))
+            {
+                return motherboard;
+            }
+
+            XDocument doc = XDocument.Parse(xml_output);
+
+            XElement? hardware_info = (doc.Descendants("key")
+                .FirstOrDefault(k => k.Value == "_items")?.NextNode as XElement)?
+                .Elements("dict")
+                .FirstOrDefault();
+
+            if (hardware_info != null)
+            {
+                motherboard.Product = GetValueFromKey(hardware_info, "machine_model") ?? "Unknown";
+                motherboard.SerialNumber = GetValueFromKey(hardware_info, "serial_number") ?? "Unknown";
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return motherboard;
+    }
 }
