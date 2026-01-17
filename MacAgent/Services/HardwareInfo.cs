@@ -7,9 +7,9 @@ namespace MacAgent.Services;
 
 public class HardwareInfo
 {
-    private static string GetValueFromKey(XElement dictNode, string key)
+    private static string GetValueFromKey(XElement? dictNode, string key)
     {
-        XElement? keyElement = dictNode.Elements("key").FirstOrDefault(k => k.Value == key);
+        XElement? keyElement = dictNode?.Elements("key").FirstOrDefault(k => k.Value == key);
 
         if (keyElement != null && keyElement.NextNode is XElement valueElement)
         {
@@ -164,16 +164,11 @@ public class HardwareInfo
 
             if (items != null)
             {
-                // 1. Encontra o dicionário principal da bateria
                 XElement? batteryNode = items.FirstOrDefault(d => GetValueFromKey(d, "_name") == "spbattery_information");
 
                 if (batteryNode != null)
                 {
-                    XElement? chargeInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_charge_info")?.NextNode as XElement;
-                    XElement? healthInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_health_info")?.NextNode as XElement;
-                    XElement? modelInfo = batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_model_info")?.NextNode as XElement;
-
-                    if (chargeInfo != null)
+                    if (batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_charge_info")?.NextNode is XElement chargeInfo)
                     {
                         if (ushort.TryParse(GetValueFromKey(chargeInfo, "sppower_battery_state_of_charge"), out ushort charge))
                         {
@@ -182,7 +177,7 @@ public class HardwareInfo
                         battery.IsCharging = GetValueFromKey(chargeInfo, "sppower_battery_is_charging")?.ToUpper() == "TRUE";
                     }
 
-                    if (healthInfo != null)
+                    if (batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_health_info")?.NextNode is XElement healthInfo)
                     {
                         if (uint.TryParse(GetValueFromKey(healthInfo, "sppower_battery_cycle_count"), out uint cycles))
                         {
@@ -197,7 +192,7 @@ public class HardwareInfo
                         }
                     }
 
-                    if (modelInfo != null)
+                    if (batteryNode.Elements("key").FirstOrDefault(k => k.Value == "sppower_battery_model_info")?.NextNode is XElement modelInfo)
                     {
                         battery.SerialNumber = GetValueFromKey(modelInfo, "sppower_battery_serial_number");
                         battery.DeviceName = GetValueFromKey(modelInfo, "sppower_battery_device_name");
@@ -321,8 +316,7 @@ public class HardwareInfo
                 {
                     foreach (XElement vNode in volumeNodes)
                     {
-                        XElement? physicalDriveNode = vNode.Elements("key").FirstOrDefault(k => k.Value == "physical_drive")?.NextNode as XElement;
-                        if (physicalDriveNode == null) continue;
+                        if (vNode.Elements("key").FirstOrDefault(k => k.Value == "physical_drive")?.NextNode is not XElement physicalDriveNode) continue;
 
                         string physicalDriveModel = GetValueFromKey(physicalDriveNode, "device_name") ?? "Unknown Drive";
 
@@ -596,5 +590,179 @@ public class HardwareInfo
         }
 
         return motherboard;
+    }
+
+    public static List<Mouse> GetMouse()
+    {
+        List<Mouse> mouseList = new List<Mouse>();
+
+        string[] profilerDataTypes = { "SPSPIDataType", "SPBluetoothDataType" };
+        foreach (string dataType in profilerDataTypes)
+        {
+            try
+            {
+                string xmlOutput = ProcessInfo.ReadProcessOut("system_profiler", $"{dataType} -xml");
+                if (!string.IsNullOrWhiteSpace(xmlOutput))
+                {
+                    ParseProfilerXml(xmlOutput, dataType, mouseList);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            string mappingXml = ProcessInfo.ReadProcessOut("ioreg", "-a -p IOUSB");
+
+            if (!string.IsNullOrWhiteSpace(mappingXml))
+            {
+                XDocument mappingDoc = XDocument.Parse(mappingXml);
+
+                List<string> deviceNames = [.. mappingDoc.Descendants("dict")
+                    .Select(d => GetValueFromKey(d, "IORegistryEntryName") ?? GetValueFromKey(d, "_name"))
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .Distinct()];
+
+                foreach (string name in deviceNames)
+                {
+                    if (IsPotentialMouse(name))
+                    {
+                        try
+                        {
+                            string detailXml = ProcessInfo.ReadProcessOut("ioreg", $"-n \"{name}\" -r -a");
+
+                            if (!string.IsNullOrWhiteSpace(detailXml))
+                            {
+                                ParseDetailedUsbXml(detailXml, mouseList);
+                            }
+                        }
+                        catch
+                        {
+
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return mouseList;
+    }
+
+    private static bool IsPotentialMouse(string name)
+    {
+        return name.Contains("Mouse", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Trackpad", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Wireless Device", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Receiver", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Magic", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ParseDetailedUsbXml(string xml, List<Mouse> list)
+    {
+        try
+        {
+            XDocument doc = XDocument.Parse(xml);
+
+            foreach (XElement dict in doc.Descendants("dict"))
+            {
+                string name = GetValueFromKey(dict, "USB Product Name") ??
+                              GetValueFromKey(dict, "IORegistryEntryName") ?? "";
+
+                if (!IsPotentialMouse(name))
+                {
+                    continue;
+                }
+
+                string manufacturer = GetValueFromKey(dict, "USB Vendor Name") ??
+                                      GetValueFromKey(dict, "manufacturer") ??
+                                      "Unknown";
+
+                if (manufacturer == "Unknown" || string.IsNullOrEmpty(manufacturer))
+                {
+                    string vid = GetValueFromKey(dict, "idVendor");
+
+                    if (!string.IsNullOrEmpty(vid)) manufacturer = GetVendorNameFromId(vid);
+                }
+
+                if (!list.Any(m => m.Name == name))
+                {
+                    list.Add(new Mouse
+                    {
+                        Name = name,
+                        Caption = name,
+                        Description = "USB Device",
+                        Manufacturer = manufacturer,
+                        NumberOfButtons = (byte)(name.Contains("Trackpad", StringComparison.OrdinalIgnoreCase) ? 1 : 2)
+                    });
+                }
+            }
+        }
+        catch { }
+    }
+
+    private static void ParseProfilerXml(string xml, string dataType, List<Mouse> list)
+    {
+        XDocument doc = XDocument.Parse(xml);
+
+        if (dataType == "SPBluetoothDataType")
+        {
+            if (doc.Descendants("key").FirstOrDefault(k => k.Value == "device_connected")?.NextNode is XElement connected)
+            {
+                foreach (XElement wrapper in connected.Elements("dict"))
+                {
+                    XElement? key = wrapper.Elements("key").FirstOrDefault();
+
+                    if (key != null)
+                    {
+                        string name = key.Value;
+                        XElement? details = key.NextNode as XElement;
+                        string type = GetValueFromKey(details, "device_minorType") ?? "";
+
+                        if (IsPotentialMouse(name) ||
+                            type.Contains("Mouse") ||
+                            type.Contains("Trackpad"))
+                        {
+                            string vendor = GetValueFromKey(details, "device_vendorID");
+                            if (!list.Any(m => m.Name == name))
+                            {
+                                list.Add(new Mouse
+                                {
+                                    Name = name,
+                                    Caption = name,
+                                    Description = "Bluetooth",
+                                    Manufacturer = GetVendorNameFromId(vendor?.Replace("0x", "") ?? ""),
+                                    NumberOfButtons = 2
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            foreach (XElement dict in doc.Descendants("dict"))
+            {
+                string name = GetValueFromKey(dict, "_name") ?? "";
+
+                if (name.Contains("Trackpad"))
+                {
+                    if (!list.Any(m => m.Name == name))
+                        list.Add(new Mouse
+                        {
+                            Name = name,
+                            Caption = name,
+                            Description = "SPI",
+                            Manufacturer = "Apple Inc.",
+                            NumberOfButtons = 1
+                        });
+                }
+            }
+        }
     }
 }
